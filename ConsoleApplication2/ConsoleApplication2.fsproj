@@ -49,8 +49,10 @@
     <Reference Include="System.Windows.Forms" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="AI.fsi" />
     <Compile Include="AI.fs" />
     <None Include="App.config" />
+    <Compile Include="Program.fsi" />
     <Compile Include="Program.fs" />
     <Compile Include="Board.fs" />
     <None Include="Script1.fsx" />
