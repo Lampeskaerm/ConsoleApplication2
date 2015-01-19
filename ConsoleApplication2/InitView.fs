@@ -67,7 +67,10 @@ module InitView =
         new Button(Location=Point(150,150),Size=Size(100,100),Text="Easy")
 
     let lvlBtn2 =
-        new Button(Location=Point(275,150),Size=Size(100,100),Text="Expert")
+        new Button(Location=Point(275,150),Size=Size(100,100),Text="Normal")
+
+    let lvlBtn3 =
+        new Button(Location=Point(400,150),Size=Size(100,100),Text="Expert")
 
     let startBtn = 
        new Button(Location=Point(250,400),MinimumSize=Size(100,25),
@@ -90,6 +93,7 @@ module InitView =
         startWindow.Controls.Add errorBoxMenu
         startWindow.Controls.Add lvlBtn1
         startWindow.Controls.Add lvlBtn2
+        startWindow.Controls.Add lvlBtn3
 
     let initGameWindow =
         gameWindow.Controls.Add playerHeader

@@ -38,11 +38,11 @@ module Board =
 
     // An enumeration of the possible events 
     type Message =
-      | Run of string*string | Start of bool*string | Web of string | Error | Cancelled
+      | Run of string*string | Start of string | StartAI of int | Web of string | Error | Cancelled
 
     //Disable functions
     let rec disableBtns bs = 
-        for b in [InitView.startBtn;InitView.restartBtn;InitView.submitBtn;InitView.lvlBtn1;InitView.lvlBtn2] do 
+        for b in [InitView.startBtn;InitView.restartBtn;InitView.submitBtn;InitView.lvlBtn1;InitView.lvlBtn2;InitView.lvlBtn3] do 
             b.Enabled  <- true
         for (b:Button) in bs do 
             b.Enabled  <- false
@@ -55,7 +55,7 @@ module Board =
     //Run async events
     let ev = AsyncEventQueue()
 
-    let rec turnPlayer(list:int list, p, b, mp) = 
+    let rec turnPlayer(list:int list, p, d, b, mp) = 
         async {InitView.heaps.Text <- Program.genNewStr list
                InitView.playerHeader.Text <- "Player: " + (string p) 
                ignore (disableTBs true [InitView.heapChoiceBox;InitView.numberOfMatchesBox])
@@ -68,30 +68,39 @@ module Board =
                               | [] -> InitView.heaps.Text <- Program.genNewStr nl
                                       return! endScreen("Player " + (string p) + " was the winner!! :D") 
                               | _ ->  match p with
-                                      | 1 when b = true -> return! turnAI(nl,"AI", b, mp) 
-                                      | _ when p < mp -> return! turnPlayer(nl, p+1, b, mp)
-                                      | _ -> return! turnPlayer(list,1,b,mp)
+                                      | 1 when b = true -> return! turnAI(nl,"AI", d, b, mp) 
+                                      | _ when p < mp -> return! turnPlayer(nl, p+1, d, b, mp)
+                                      | _ -> return! turnPlayer(list,1,d,b,mp)
                | Start _ -> InitView.gameWindow.Hide()
                             InitView.startWindow.Show()
                             return! mainMenu()
                | _ -> InitView.errorBoxGame.Text <- "You fucked it up"
-                      return! turnPlayer(list,p,b,mp)}
+                      return! turnPlayer(list,p,d,b,mp)}
 
-    and turnAI(list:int list, p, b, mp) =
+    and turnAI(list:int list, p, d, b, mp) =
         async{  InitView.heaps.Text <- Program.genNewStr list
                 InitView.playerHeader.Text <- p
                 ignore (disableTBs false [InitView.heapChoiceBox;InitView.numberOfMatchesBox])
                 ignore (disableBtns [InitView.submitBtn;InitView.restartBtn])
            
                 do! Async.Sleep(5*1000)
+                let nl = if d = 3 
+                         then AI.expertAI list 
+                         else (if d = 2 
+                               then AI.normalAI list 
+                               else AI.easyAI list) 
 
-                if AI.getM list <> 0
+                if d = 3
+                then if AI.getM list <> 0
+                     then InitView.provoLabel.Text <- "Muahahahahaaaa! You cannot win!"
+
+                if nl = [1;1]
                 then InitView.provoLabel.Text <- "Muahahahahaaaa! You cannot win!"
-                let nl = AI.theSmartestAI list
+
                 match nl with
                 | [] -> InitView.heaps.Text <- Program.genNewStr nl
                         return! endScreen("The AI was the winner! - Too bad for you. You got beaten by a computer.")
-                | _  -> return! turnPlayer(nl,1, b, mp)}
+                | _  -> return! turnPlayer(nl,1,d, b, mp)}
 
     and endScreen(s) = 
         async{  InitView.playerHeader.Text <- s 
@@ -107,7 +116,7 @@ module Board =
                 | _ -> InitView.errorBoxGame.Text <- "You did something unknown"
                        return! endScreen(s)}
 
-    and getLevel(b, mp) = 
+    and getLevel(d, b, mp) = 
         async{  InitView.playerHeader.Text <- "Downloading level"
                 use ts = new CancellationTokenSource()
 
@@ -123,7 +132,7 @@ module Board =
                 let! msg = ev.Receive()
                 match msg with
                 | Web html -> let list = Program.stringToList html
-                              return! turnPlayer (list,1,b,mp)
+                              return! turnPlayer (list,1,d,b,mp)
                 | _ -> failwith "returned error or was cancelled"}
 
     and mainMenu() =
@@ -131,18 +140,21 @@ module Board =
 
                let! msg = ev.Receive()
                match msg with
-               | Start (false,"1") -> InitView.errorBoxMenu.Text <- "Trying to get a confidence boost? More than one player please"
-                                      return! mainMenu()
-               | Start (b,s) ->  if b
+               | Start ("1") -> InitView.errorBoxMenu.Text <- "Trying to get a confidence boost? More than one player please"
+                                return! mainMenu()
+               | Start (s) ->    if   (fst(Int32.TryParse(s)))
                                  then InitView.startWindow.Hide()
                                       InitView.gameWindow.Show()
-                                      return! getLevel(b,2)
-                                 else  if   (fst(Int32.TryParse(s)))
-                                       then InitView.startWindow.Hide()
-                                            InitView.gameWindow.Show()
-                                            return! getLevel(b,int s)
-                                       else InitView.errorBoxMenu.Text <- "The amount of players has to be a number"
-                                            return! mainMenu()
+                                      return! getLevel(0,false,int s)
+                                 else InitView.errorBoxMenu.Text <- "The amount of players has to be a number"
+                                      return! mainMenu()
+               | StartAI (d) -> InitView.startWindow.Hide()
+                                InitView.gameWindow.Show()
+                                if d = 1
+                                then return! getLevel(1,true,2)
+                                else if d = 2
+                                     then return! getLevel(2,true,2)
+                                     else return! getLevel(3,true,2)
                | _ -> InitView.errorBoxMenu.Text <- "Something unexpected happened - can't start the game"
                       return! mainMenu()}
 
@@ -151,9 +163,12 @@ module Board =
     InitView.initGameWindow
 
     //Add functionalities to buttons
-    disableBtns [InitView.lvlBtn1;InitView.lvlBtn2]
-    InitView.AIChoice.Click.Add (fun _ -> if InitView.AIChoice.Checked then disableBtns [] else disableBtns [InitView.lvlBtn1;InitView.lvlBtn2] )
-    InitView.startBtn.Click.Add (fun _ -> ev.Post (Start (InitView.AIChoice.Checked, InitView.noOfPlayers.Text)))
+    disableBtns [InitView.lvlBtn1;InitView.lvlBtn2;InitView.lvlBtn3]
+    InitView.AIChoice.Click.Add (fun _ -> if InitView.AIChoice.Checked then disableBtns [] else disableBtns [InitView.lvlBtn1;InitView.lvlBtn2;InitView.lvlBtn3] )
+    InitView.startBtn.Click.Add (fun _ -> ev.Post (Start (InitView.noOfPlayers.Text)))
     InitView.submitBtn.Click.Add (fun _ -> ev.Post (Run (InitView.heapChoiceBox.Text,InitView.numberOfMatchesBox.Text)))
-    InitView.restartBtn.Click.Add (fun _ -> ev.Post (Start (false,"") ))
+    InitView.restartBtn.Click.Add (fun _ -> ev.Post (Start ("") ))
+    InitView.lvlBtn1.Click.Add (fun _ -> ev.Post (StartAI (1)))
+    InitView.lvlBtn2.Click.Add (fun _ -> ev.Post (StartAI (2)))
+    InitView.lvlBtn3.Click.Add (fun _ -> ev.Post (StartAI (3)))
 ;;

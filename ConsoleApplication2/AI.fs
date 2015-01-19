@@ -51,12 +51,12 @@ module AI =
         | [] -> failwith ("No heaps")
         | la -> replaceA la
         
-    let genRandNumber f t = System.Random().Next(f,t);;
+    let genRandNumber f t = System.Random().Next(f,t)
 
     let rec getHeapSize n m (lvl:Level) =
         match lvl with
         | [] -> failwith ("Index out of bounds")
-        | a::la -> if n = m then a else getHeapSize n+1 m la
+        | a::la -> if n = m then a else getHeapSize (n+1) m la
 
     let rec genNewList n m a la:Level =
         match la with
@@ -65,7 +65,7 @@ module AI =
                     then if x=a
                          then xs
                          else (x-a)::xs
-                    else x::genNewList n+1 m a xs
+                    else x::genNewList (n+1) m a xs
 
     let normalAI (lvl:Level) =
         match lvl with
