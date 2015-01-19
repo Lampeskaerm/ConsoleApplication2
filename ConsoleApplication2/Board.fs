@@ -2,6 +2,7 @@
 
 open Program
 open AI
+open InitView
 
 open System
 open System.Net
@@ -9,216 +10,150 @@ open System.Threading
 open System.Windows.Forms
 open System.Drawing
 
-//Different functions
-// An asynchronous event queue kindly provided by Don Syme 
-type AsyncEventQueue<'T>() = 
-    let mutable cont = None 
-    let queue = System.Collections.Generic.Queue<'T>()
-    let tryTrigger() = 
-        match queue.Count, cont with 
-        | _, None -> ()
-        | 0, _ -> ()
-        | _, Some d -> 
-            cont <- None
-            d (queue.Dequeue())
+type ViewList = View List
 
-    let tryListen(d) = 
-        if cont.IsSome then invalidOp "multicast not allowed"
-        cont <- Some d
-        tryTrigger()
+module Board = 
+    //Different functions
+    // An asynchronous event queue kindly provided by Don Syme 
+    type AsyncEventQueue<'T>() = 
+        let mutable cont = None 
+        let queue = System.Collections.Generic.Queue<'T>()
+        let tryTrigger() = 
+            match queue.Count, cont with 
+            | _, None -> ()
+            | 0, _ -> ()
+            | _, Some d -> 
+                cont <- None
+                d (queue.Dequeue())
 
-    member x.Post msg = queue.Enqueue msg; tryTrigger()
-    member x.Receive() = 
-        Async.FromContinuations (fun (cont,econt,ccont) -> 
-            tryListen cont);;
+        let tryListen(d) = 
+            if cont.IsSome then invalidOp "multicast not allowed"
+            cont <- Some d
+            tryTrigger()
 
-//Initialize forms and window
-let gameWindow =
-  new Form(Text="Nim", Size=Size(600,600));;
+        member x.Post msg = queue.Enqueue msg; tryTrigger()
+        member x.Receive() = 
+            Async.FromContinuations (fun (cont,econt,ccont) -> 
+                tryListen cont)
 
-let startWindow =
-  new Form(Text="Nim", Size=Size(600,600));;
+    // An enumeration of the possible events 
+    type Message =
+      | Run of string*string | Start of bool*string | Web of string | Error | Cancelled
 
-let playerHeader = 
-    new Label (Location=Point(100,50), MinimumSize=Size(200,50));;
+    //Disable functions
+    let rec disableBtns bs = 
+        for b in [InitView.startBtn;InitView.restartBtn;InitView.submitBtn;InitView.lvlBtn1;InitView.lvlBtn2] do 
+            b.Enabled  <- true
+        for (b:Button) in bs do 
+            b.Enabled  <- false
 
-let heaps = 
-  new Label(Location=Point(50,100),MinimumSize=Size(100,25),
-              MaximumSize=Size(100,50));;
+    let rec disableTBs b = function
+        | [] -> []
+        | (x:TextBox)::xs -> x.Enabled <- b
+                             x::disableTBs b xs
 
-let heapChoiceBox =
-  new TextBox(Location=Point(150,300),Size=Size(100,25));;
+    //Run async events
+    let ev = AsyncEventQueue()
 
-let numberOfMatchesBox = 
-    new TextBox(Location=Point(350,300),Size=Size(100,25));;
+    let rec turnPlayer(list:int list, p, b, mp) = 
+        async {InitView.heaps.Text <- Program.genNewStr list
+               InitView.playerHeader.Text <- "Player: " + (string p) 
+               ignore (disableTBs true [InitView.heapChoiceBox;InitView.numberOfMatchesBox])
+               ignore (disableBtns [])
 
-let label1 =
-    new Label(Location=Point(150,270),Text="Write heap number");;
+               let! msg = ev.Receive()
+               match msg with
+               | Run (h,n) -> let nl = Program.genNewList list (int h,int n)
+                              match nl with
+                              | [] -> InitView.heaps.Text <- Program.genNewStr nl
+                                      return! endScreen("Player " + (string p) + " was the winner!! :D") 
+                              | _ ->  match p with
+                                      | 1 when b = true -> return! turnAI(nl,"AI", b, mp) 
+                                      | _ when p < mp -> return! turnPlayer(nl, p+1, b, mp)
+                                      | _ -> return! turnPlayer(list,1,b,mp)
+               | Start _ -> InitView.gameWindow.Hide()
+                            InitView.startWindow.Show()
+                            return! mainMenu()
+               | _ -> InitView.errorBoxGame.Text <- "You fucked it up"
+                      return! turnPlayer(list,p,b,mp)}
 
-let label2 =
-    new Label(Location=Point(350,270),Text="No. of matches");;
-
-let submitBtn =
-  new Button(Location=Point(250,400),MinimumSize=Size(100,25),
-              MaximumSize=Size(100,50),Text="Submit");;
-
-let restartBtn =
-  new Button(Location=Point(400,400),MinimumSize=Size(100,25),
-             Text="Restart");;
-
-let AIChoice = 
-  new CheckBox(Location=Point(250,100));;
-
-let AIChoiceLabel =
-  new Label(Location=Point(150,100), Text="Play only against AI");;
-
-let noOfPlayers =
-  new TextBox(Location=Point(250,200),Size=Size(100,25));;
-
-let noOfPlayersLabel =
-  new Label(Location=Point(150,200),Text="No of players if no AI");;
-
-let won =
-  new Label(Location=Point(400,100),Text="Won: 0");;
-
-let lost =
-  new Label(Location=Point(400,200),Text="Lost: 0");;
-
-let startBtn = 
-   new Button(Location=Point(250,400),MinimumSize=Size(100,25),
-              MaximumSize=Size(100,50),Text="Start");;
-
-let errorBoxMenu =
-   new Label (Location=Point(150,300),MinimumSize=Size(100,25),
-              MaximumSize=Size(200,25));;
-
-// An enumeration of the possible events 
-type Message =
-  | Run of string*string | Start of bool*string | Web of string | Error | Cancelled
-
-//Disable functions
-let disableAI b =     numberOfMatchesBox.Enabled <- b
-                      heapChoiceBox.Enabled <- b
-                      submitBtn.Enabled <- b;;
-
-let enableRestart b = restartBtn.Enabled <- b;;
-
-//Run async events
-let ev = AsyncEventQueue();;
-
-let rec newRound(list:int list, p) = 
-    async {heaps.Text <- Program.genNewStr list
-           playerHeader.Text <- "Player: " + (string p)
-
-           let! msg = ev.Receive()
-           match msg with
-           | Run (h,n) -> let nl = Program.genNewList list (int h,int n)
-                          match p with
-                          | 1 -> return! newRound(nl,2) 
-                          | 2 -> return! newRound(nl,1) 
-                          | _ -> failwith "Number of players max is 2"
-                                  
-           | _ -> failwith "You messed it up"}
-
-let rec turnPlayer(list:int list, p, b, mp) = 
-    async {heaps.Text <- Program.genNewStr list
-           playerHeader.Text <- "Player: " + (string p)
-           disableAI true
-
-           let! msg = ev.Receive()
-           match msg with
-           | Run (h,n) -> let nl = Program.genNewList list (int h,int n)
-                          match nl with
-                          | [] -> heaps.Text <- Program.genNewStr nl
-                                  return! endScreen("Player " + (string p) + " was the winner!! :D") 
-                          | _ ->  match p with
-                                  | 1 when b = true -> return! turnAI(nl,"AI", b, mp) 
-                                  | _ when p < mp -> return! turnPlayer(nl, p+1, b, mp)
-                                  | _ -> return! turnPlayer(list,1,b,mp)
-                                  
-           | _ -> failwith "You messed it up"}
-
-and turnAI(list:int list, p, b, mp) =
-    async{  heaps.Text <- Program.genNewStr list
-            playerHeader.Text <- p
-            disableAI false
+    and turnAI(list:int list, p, b, mp) =
+        async{  InitView.heaps.Text <- Program.genNewStr list
+                InitView.playerHeader.Text <- p
+                ignore (disableTBs false [InitView.heapChoiceBox;InitView.numberOfMatchesBox])
+                ignore (disableBtns [InitView.submitBtn;InitView.restartBtn])
            
-            do! Async.Sleep(5*1000)
+                do! Async.Sleep(5*1000)
 
-            let nl = AI.theSmartestAI list
-            match nl with
-            | [] -> heaps.Text <- Program.genNewStr nl
-                    return! endScreen("The AI was the winner! - Too bad for you. You got beaten by a computer.")
-            | _  -> return! turnPlayer(nl,1, b, mp)}
+                if AI.getM list <> 0
+                then InitView.provoLabel.Text <- "Muahahahahaaaa! You cannot win!"
+                let nl = AI.theSmartestAI list
+                match nl with
+                | [] -> InitView.heaps.Text <- Program.genNewStr nl
+                        return! endScreen("The AI was the winner! - Too bad for you. You got beaten by a computer.")
+                | _  -> return! turnPlayer(nl,1, b, mp)}
 
-and endScreen(s) = 
-    async{  playerHeader.Text <- s 
-            disableAI false
-            enableRestart true
+    and endScreen(s) = 
+        async{  InitView.playerHeader.Text <- s 
+                ignore (disableTBs false [InitView.heapChoiceBox;InitView.numberOfMatchesBox])
+                ignore (disableBtns [InitView.submitBtn])
             
             
-            let! msg = ev.Receive()
-            match msg with
-            | Start _ -> gameWindow.Hide()
-                         startWindow.Show()
-                         return! mainMenu()
-            | _ -> failwith "You did something unknown"}
+                let! msg = ev.Receive()
+                match msg with
+                | Start _ -> InitView.gameWindow.Hide()
+                             InitView.startWindow.Show()
+                             return! mainMenu()
+                | _ -> InitView.errorBoxGame.Text <- "You did something unknown"
+                       return! endScreen(s)}
 
-and getLevel(b, mp) = 
-    async{  playerHeader.Text <- "Downloading level"
-            use ts = new CancellationTokenSource()
+    and getLevel(b, mp) = 
+        async{  InitView.playerHeader.Text <- "Downloading level"
+                use ts = new CancellationTokenSource()
 
-            Async.StartWithContinuations
-             (async { let webCl = new WebClient()
-                      let! html = webCl.AsyncDownloadString(Uri "http://www2.compute.dtu.dk/~mire/nim.game")
-                      return html },
-              (fun html -> ev.Post (Web html)),
-              (fun _ -> ev.Post Error),
-              (fun _ -> ev.Post Cancelled),
-              ts.Token)
+                Async.StartWithContinuations
+                 (async { let webCl = new WebClient()
+                          let! html = webCl.AsyncDownloadString(Uri "http://www2.compute.dtu.dk/~mire/nim.game")
+                          return html },
+                  (fun html -> ev.Post (Web html)),
+                  (fun _ -> ev.Post Error),
+                  (fun _ -> ev.Post Cancelled),
+                  ts.Token)
               
-            let! msg = ev.Receive()
-            match msg with
-            | Web html -> let list = Program.stringToList html
-                          return! turnPlayer (list,1,b,mp)
-            | _ -> failwith "returned error or was cancelled"}
+                let! msg = ev.Receive()
+                match msg with
+                | Web html -> let list = Program.stringToList html
+                              return! turnPlayer (list,1,b,mp)
+                | _ -> failwith "returned error or was cancelled"}
 
-and mainMenu() =
-    async{ playerHeader.Text <- "Welcome to Nim!"
+    and mainMenu() =
+        async{ InitView.playerHeader.Text <- "Welcome to Nim!"
 
-           let! msg = ev.Receive()
-           match msg with
-           | Start (b,s) ->  let check = fst (Int32.TryParse(s))
-                             if check 
-                             then startWindow.Hide()
-                                  gameWindow.Show()
-                                  enableRestart false
-                                  return! getLevel(b,int s)
-                             else errorBoxMenu.Text <- "The amount of players has to be a number"
-           | _ -> errorBoxMenu.Text <- "Something unexpected happened - can't start the game"}
+               let! msg = ev.Receive()
+               match msg with
+               | Start (false,"1") -> InitView.errorBoxMenu.Text <- "Trying to get a confidence boost? More than one player please"
+                                      return! mainMenu()
+               | Start (b,s) ->  if b
+                                 then InitView.startWindow.Hide()
+                                      InitView.gameWindow.Show()
+                                      return! getLevel(b,2)
+                                 else  if   (fst(Int32.TryParse(s)))
+                                       then InitView.startWindow.Hide()
+                                            InitView.gameWindow.Show()
+                                            return! getLevel(b,int s)
+                                       else InitView.errorBoxMenu.Text <- "The amount of players has to be a number"
+                                            return! mainMenu()
+               | _ -> InitView.errorBoxMenu.Text <- "Something unexpected happened - can't start the game"
+                      return! mainMenu()}
 
-//Add forms to windows
-startWindow.Controls.Add AIChoice
-startWindow.Controls.Add AIChoiceLabel
-startWindow.Controls.Add noOfPlayers
-startWindow.Controls.Add noOfPlayersLabel
-startWindow.Controls.Add startBtn
-startWindow.Controls.Add won
-startWindow.Controls.Add lost
-startWindow.Controls.Add errorBoxMenu
-startBtn.Click.Add (fun _ -> ev.Post (Start (AIChoice.Checked, noOfPlayers.Text)));;
+    //Add forms to windows
+    InitView.initStartWindow
+    InitView.initGameWindow
 
-gameWindow.Controls.Add playerHeader;;
-gameWindow.Controls.Add submitBtn
-gameWindow.Controls.Add restartBtn
-gameWindow.Controls.Add heapChoiceBox
-gameWindow.Controls.Add numberOfMatchesBox
-gameWindow.Controls.Add label1
-gameWindow.Controls.Add label2
-gameWindow.Controls.Add heaps
-submitBtn.Click.Add (fun _ -> ev.Post (Run (heapChoiceBox.Text,numberOfMatchesBox.Text)));;
-restartBtn.Click.Add (fun _ -> ev.Post (Start (false,"") ));;
-                    
-
-Async.StartImmediate (mainMenu());;
-startWindow.Show();;
+    //Add functionalities to buttons
+    disableBtns [InitView.lvlBtn1;InitView.lvlBtn2]
+    InitView.AIChoice.Click.Add (fun _ -> if InitView.AIChoice.Checked then disableBtns [] else disableBtns [InitView.lvlBtn1;InitView.lvlBtn2] )
+    InitView.startBtn.Click.Add (fun _ -> ev.Post (Start (InitView.AIChoice.Checked, InitView.noOfPlayers.Text)))
+    InitView.submitBtn.Click.Add (fun _ -> ev.Post (Run (InitView.heapChoiceBox.Text,InitView.numberOfMatchesBox.Text)))
+    InitView.restartBtn.Click.Add (fun _ -> ev.Post (Start (false,"") ))
+;;
