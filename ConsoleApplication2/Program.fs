@@ -9,10 +9,10 @@ module Program =
 
     //Generates a string from a list
     //genNewStr: Level -> string
-    let rec genNewStr (lvl:Level) = 
+    let rec genNewStr n (lvl:Level) = 
         match lvl with
         | [] -> ""
-        | a::(la:int list) -> (string a) + " " + genNewStr la
+        | a::(la:int list) -> (string n) + ": " + (string a) + "   " + genNewStr (n+1) la
 
     //Generates the new list of heaps, when matches are removed
     //If the number of matches to be removed is higher than the number of matches in the heap

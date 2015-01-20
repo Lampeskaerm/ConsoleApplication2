@@ -54,9 +54,11 @@
     <None Include="App.config" />
     <Compile Include="Program.fsi" />
     <Compile Include="Program.fs" />
+    <Compile Include="InitView.fsi" />
     <Compile Include="InitView.fs" />
     <Compile Include="Board.fs" />
     <None Include="Script1.fsx" />
+    <Compile Include="File1.fsi" />
   </ItemGroup>
   <PropertyGroup>
     <MinimumVisualStudioVersion Condition="'$(MinimumVisualStudioVersion)' == ''">11</MinimumVisualStudioVersion>

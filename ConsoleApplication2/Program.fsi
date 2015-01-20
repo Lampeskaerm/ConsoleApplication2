@@ -6,6 +6,6 @@ type Index = int
 type Amount = int 
 
 module Program =
-    val genNewStr : Level -> string
+    val genNewStr : int -> Level -> string
     val genNewList : Level -> Index * Amount -> Level
     val stringToList : string -> Level

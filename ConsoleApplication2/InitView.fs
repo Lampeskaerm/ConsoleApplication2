@@ -19,8 +19,8 @@ module InitView =
         new Label (Location=Point(100,50), MinimumSize=Size(200,50))
 
     let heaps = 
-      new Label(Location=Point(50,100),MinimumSize=Size(100,25),
-                  MaximumSize=Size(100,50))
+      new Label(Location=Point(50,100),MinimumSize=Size(500,25),
+                  MaximumSize=Size(500,50))
 
     let heapChoiceBox =
       new TextBox(Location=Point(150,300),Size=Size(100,25))
@@ -57,12 +57,6 @@ module InitView =
     let noOfPlayersLabel =
       new Label(Location=Point(150,300),Text="No of players if no AI")
 
-    let won =
-      new Label(Location=Point(400,100),Text="Won: 0")
-
-    let lost =
-      new Label(Location=Point(400,300),Text="Lost: 0")
-
     let lvlBtn1 =
         new Button(Location=Point(150,150),Size=Size(100,100),Text="Easy")
 
@@ -76,6 +70,9 @@ module InitView =
        new Button(Location=Point(250,400),MinimumSize=Size(100,25),
                   MaximumSize=Size(100,50),Text="Start")
 
+    let cancelBtn = 
+       new Button(Location=Point(350,400),MinimumSize=Size(100,25), Text="Cancel")
+
     let errorBoxMenu =
       new Label (Location=Point(150,500),Size=Size(300,25))
 
@@ -88,8 +85,7 @@ module InitView =
         startWindow.Controls.Add noOfPlayers
         startWindow.Controls.Add noOfPlayersLabel
         startWindow.Controls.Add startBtn
-        startWindow.Controls.Add won
-        startWindow.Controls.Add lost
+        startWindow.Controls.Add cancelBtn
         startWindow.Controls.Add errorBoxMenu
         startWindow.Controls.Add lvlBtn1
         startWindow.Controls.Add lvlBtn2
